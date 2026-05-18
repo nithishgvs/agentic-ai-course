@@ -1,3 +1,53 @@
 # python -m venv venv
 # source venv/bin/activate  (Mac/Linux)
 # pip install -r requirements.txt
+
+## ChromaDB Notes
+
+`chromadb` is a vector database. It is not the same kind of database as Oracle.
+
+Oracle is a relational database:
+
+- stores structured data in tables, rows, and columns
+- uses SQL
+- usually runs as a separate database server
+- good for transactions and structured business data
+
+ChromaDB is a vector database:
+
+- stores text embeddings, documents, and metadata
+- searches by meaning/similarity instead of only exact keywords
+- commonly used for RAG, semantic search, and AI memory
+- can run embedded inside a Python app or as a separate server
+
+For local learning, Chroma usually runs embedded in the Python process:
+
+```python
+from langchain_chroma import Chroma
+
+vectorstore = Chroma(
+    collection_name="docs",
+    persist_directory="./chroma_db",
+)
+```
+
+This stores local data in a folder such as:
+
+```text
+./chroma_db
+```
+
+No separate database server is required for this mode.
+
+Chroma can also run as a server:
+
+```bash
+chroma run
+```
+
+Simple mental model:
+
+```text
+chromadb = vector storage engine
+langchain-chroma = LangChain wrapper/integration for Chroma
+```

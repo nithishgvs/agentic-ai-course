@@ -7,3 +7,6 @@ langchain-openai
 langgraph
 pydantic
 tavily
+langchain-chroma
+faiss-cpu
+langchain-community
