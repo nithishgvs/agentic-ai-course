@@ -24,10 +24,7 @@ embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 # In a real app, these might come from PDFs, websites, docs, or database rows.
 documents = [
     "LangGraph is a library for building stateful multi-agent applications.",
-    (
-        "LangGraph uses a graph-based approach where nodes are functions "
-        "and edges define flow."
-    ),
+    "LangGraph uses a graph-based approach where nodes are functions and edges define flow.",
     "State in LangGraph is a TypedDict that flows through the graph.",
     "LangGraph supports conditional edges for dynamic routing between nodes.",
     "Human-in-the-loop can be implemented using interrupt_before in LangGraph.",
@@ -46,8 +43,9 @@ retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 # The final prompt will contain:
 # - context: documents retrieved from Chroma
 # - question: the user's question
-template = """Answer the question based only on the following context.
-If you cannot answer from the context, say "I don't have enough information."
+template = """Answer the question using only the following context.
+If the context contains a relevant fact, answer with that fact in a concise way.
+If the context has no relevant facts for the question, say "I don't have enough information."
 
 Context:
 {context}
@@ -65,6 +63,26 @@ def format_docs(docs):
     # doc.page_content contains the text for each retrieved document.
     # This joins the retrieved docs into one context string for the prompt.
     return "\n\n".join(doc.page_content for doc in docs)
+
+
+def debug_retrieval(question: str) -> None:
+    # Debug helper:
+    # Before blaming the LLM answer, first check what documents were retrieved.
+    # If the right document is missing here, the issue is retrieval.
+    # If the right document is present here, the issue is likely the prompt/LLM step.
+    docs = retriever.invoke(question)
+
+    print("\n--- Retrieved Documents ---")
+    if not docs:
+        print("No documents were retrieved.")
+
+    for index, doc in enumerate(docs, start=1):
+        print(f"\nDocument {index}:")
+        print(doc.page_content)
+
+    print("\n--- Formatted Context Sent To Prompt ---")
+    print(format_docs(docs))
+    print("--- End Context ---\n")
 
 
 # Build the RAG chain.
@@ -91,6 +109,10 @@ rag_chain = (
 
 # Ask a question.
 # The chain will retrieve relevant LangGraph documents before answering.
-answer = rag_chain.invoke("How does state work in LangGraph?")
+question = "How does state work in LangGraph?"
+debug_retrieval(question)
+
+answer = rag_chain.invoke(question)
+print("--- Final Answer ---")
 print(answer)
 # => "State in LangGraph is a TypedDict that flows through the graph..."

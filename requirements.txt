@@ -10,3 +10,4 @@ tavily
 langchain-chroma
 faiss-cpu
 langchain-community
+pypdf
