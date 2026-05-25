@@ -11,6 +11,6 @@ langchain-chroma
 faiss-cpu
 langchain-community
 pypdf
-langsmith
 fastapi
 uvicorn
+langsmith
