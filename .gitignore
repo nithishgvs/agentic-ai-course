@@ -5,3 +5,11 @@ __pycache__/
 *.py[cod]
 .DS_Store
 .idea/
+
+# Local generated vector stores and output folders
+chroma_db/
+faiss_index/
+handbook_db/
+qa_db/
+reports/
+customer-support-agent/support_kb/

@@ -1,3 +1,17 @@
+"""
+Customer Support Agent using LangGraph
+
+This module implements an AI-powered customer support agent with the following features:
+- Message classification (general, technical, sensitive, escalate)
+- RAG (Retrieval-Augmented Generation) for knowledge base search
+- Automatic ticket creation for technical issues
+- Escalation to human agents for sensitive cases
+- Session-based conversation memory
+
+Architecture:
+The agent uses a LangGraph StateGraph with conditional routing based on message classification.
+"""
+
 from typing import Annotated, Literal
 
 from dotenv import load_dotenv
@@ -7,16 +21,29 @@ from langgraph.constants import START, END
 from langgraph.graph import add_messages, StateGraph
 from typing_extensions import TypedDict
 
+# Load environment variables (OPENAI_API_KEY, etc.)
 load_dotenv()
 
 from knowledge_base import get_knowledge_base
 from tools import *
 
-llm = ChatOpenAI(model="gpt-4o")
-fast_llm = ChatOpenAI(model="gpt-4o-mini")  # For classification (cheaper)
+# Initialize language models
+llm = ChatOpenAI(model="gpt-4o")  # Main model for generating responses
+fast_llm = ChatOpenAI(model="gpt-4o-mini")  # Faster, cheaper model for classification
 
 
 class SupportState(TypedDict):
+    """
+    State object that flows through the agent graph.
+
+    Attributes:
+        messages: Conversation history (automatically merged by add_messages)
+        classification: Message category for routing decisions
+        retrieved_context: Relevant information from knowledge base
+        ticket_id: Created ticket reference number (if applicable)
+        escalated: Whether the conversation has been escalated to a human
+        response: Final response text to send to the customer
+    """
     messages: Annotated[list[BaseMessage], add_messages]
     classification: str  # "general", "technical", "sensitive", "escalate"
     retrieved_context: str
@@ -32,10 +59,16 @@ kb = get_knowledge_base()
 # --- Node Definitions ---
 
 def classify_node(state: SupportState) -> dict:
-    """Classify the user's message to determine routing."""
+    """
+    Classify the user's message to determine routing.
+
+    Uses a fast LLM to categorize the message into one of four categories,
+    which determines how the agent will process the request.
+    """
     messages = state["messages"]
     last_message = messages[-1].content
 
+    # Use the faster model for cost-effective classification
     response = fast_llm.invoke([
         SystemMessage(content="""Classify this customer support message into ONE category.
 Respond with ONLY the category name, nothing else.
@@ -61,11 +94,17 @@ Message to classify:"""),
 
 
 def rag_search_node(state: SupportState) -> dict:
-    """Search the knowledge base for relevant information."""
+    """
+    Search the knowledge base for relevant information.
+
+    Performs vector similarity search to find the top 4 most relevant
+    documents from the knowledge base to help answer the customer's question.
+    """
     messages = state["messages"]
     last_message = messages[-1].content
     print("[RAG] Searching knowledge base...")
 
+    # Retrieve top 4 most relevant documents
     results = kb.similarity_search(last_message, k=4)
 
     if results:
@@ -81,7 +120,12 @@ def rag_search_node(state: SupportState) -> dict:
 
 
 def respond_node(state: SupportState) -> dict:
-    """Generate a helpful response using the retrieved context."""
+    """
+    Generate a helpful response using the retrieved context.
+
+    Constructs a system prompt with knowledge base context and generates
+    a professional, empathetic response to the customer's question.
+    """
     messages = state["messages"]
     context = state.get("retrieved_context", "")
     classification = state.get("classification", "general")
@@ -116,20 +160,34 @@ Rules:
 
 
 def create_ticket_node(state: SupportState) -> dict:
-    """Create a support ticket for technical issues."""
+    """
+    Create a support ticket for technical issues.
+
+    Generates a unique ticket ID for tracking the technical support request.
+    The ticket is stored in memory for later retrieval.
+    """
     messages = state["messages"]
     last_message = messages[-1].content
     classification = state.get("classification", "technical")
     context = state.get("retrieved_context", "")
-    ticket_id = create_ticket(customer_message=last_message,
-                              context=context,
-                              classification=classification)
+
+    # Create ticket with customer message and retrieved context
+    ticket_id = create_ticket(
+        customer_message=last_message,
+        context=context,
+        classification=classification
+    )
     print(f"[Ticket] Created: {ticket_id}")
     return {"ticket_id": ticket_id}
 
 
 def escalation_node(state: SupportState) -> dict:
-    """Escalate to a human agent for sensitive or urgent issues."""
+    """
+    Escalate to a human agent for sensitive or urgent issues.
+
+    Creates an escalation ticket and generates a response informing the
+    customer that their case has been prioritized for human review.
+    """
     messages = state["messages"]
     last_message = messages[-1].content
     classification = state.get("classification", "")
@@ -158,7 +216,12 @@ def escalation_node(state: SupportState) -> dict:
 # --- Routing Logic ---
 
 def route_by_classification(state: SupportState) -> Literal["rag_search", "escalation"]:
-    """Route based on message classification."""
+    """
+    Route based on message classification.
+
+    Sensitive and escalation cases go directly to human agents.
+    General and technical cases proceed to knowledge base search.
+    """
     classification = state.get("classification", "general")
 
     if classification in ("sensitive", "escalate"):
@@ -167,7 +230,12 @@ def route_by_classification(state: SupportState) -> Literal["rag_search", "escal
 
 
 def route_after_rag(state: SupportState) -> Literal["create_ticket", "respond"]:
-    """After RAG search, decide if we need a ticket."""
+    """
+    After RAG search, decide if we need a ticket.
+
+    Technical issues get a ticket created for tracking purposes.
+    General questions skip ticket creation and go straight to response.
+    """
     classification = state.get("classification", "general")
 
     if classification == "technical":
@@ -211,14 +279,29 @@ workflow.add_edge("create_ticket", "respond")
 workflow.add_edge("respond", END)
 workflow.add_edge("escalation", END)
 
-# Compile the agent
+# Compile the agent graph into an executable
 support_agent = workflow.compile()
 
-# Session memory store
+# Session memory store - maps session_id to conversation history
+# In production, this would be replaced with a proper database
 session_store: dict[str, list[BaseMessage]] = {}
 
+
 def chat(session_id: str, user_message: str) -> str:
-    """Handle a chat message with session memory."""
+    """
+    Handle a chat message with session memory.
+
+    Maintains conversation history per session and invokes the agent graph
+    to process the message through classification, RAG search, and response
+    generation.
+
+    Args:
+        session_id: Unique identifier for the conversation session
+        user_message: The customer's message text
+
+    Returns:
+        The agent's response text
+    """
 
     # Get or create session history
     if session_id not in session_store:

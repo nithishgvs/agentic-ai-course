@@ -1,3 +1,21 @@
+"""
+Customer Support Agent API Server
+
+This FastAPI server provides REST endpoints for the AI customer support agent.
+
+Endpoints:
+    POST   /chat                  - Send a message to the support agent
+    GET    /tickets/{ticket_id}   - Look up a support ticket by ID
+    DELETE /sessions/{session_id} - Clear a conversation session
+    GET    /health               - Health check endpoint
+
+The server uses:
+- FastAPI for async REST API
+- Pydantic for request/response validation
+- LangGraph agent for conversational AI
+- Session-based memory for conversation continuity
+"""
+
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -74,8 +92,18 @@ class TicketResponse(BaseModel):
 
 
 def format_response_for_json(text: str) -> str:
-    # JSON displays newline characters as "\n" in raw output.
-    # Replace line breaks with spaces so API clients see one clean text string.
+    """
+    Format response text for JSON output.
+
+    JSON displays newline characters as "\\n" in raw output.
+    Replace line breaks with spaces so API clients see one clean text string.
+
+    Args:
+        text: The raw response text from the agent
+
+    Returns:
+        Formatted text with newlines replaced by spaces
+    """
     return " ".join(text.split())
 
 
